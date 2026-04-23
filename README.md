@@ -187,13 +187,46 @@ File-handling-Project/
 pip install -r requirements.txt
 ```
 
+### Issue: Streamlit Cloud Deployment Error - "installer returned a non-zero exit code"
+**Solution**: This is usually caused by version conflicts. Try these steps:
+
+1. **Clear Streamlit Cloud cache**:
+   - Go to your app settings on Streamlit Cloud
+   - Click "Manage app" → "Settings"
+   - Scroll down and click "Reboot app"
+
+2. **Update your local requirements.txt** (already done):
+   ```
+   streamlit==1.31.1
+   pandas==2.1.4
+   numpy==1.24.3
+   matplotlib==3.8.2
+   seaborn==0.13.1
+   scipy==1.11.4
+   openpyxl==3.11.0
+   ```
+
+3. **Push the update to GitHub**:
+   ```bash
+   git add requirements.txt
+   git commit -m "Fix dependency versions for Streamlit Cloud"
+   git push origin main
+   ```
+
+4. **Reboot your Streamlit Cloud app** from the app menu (three dots → Reboot app)
+
+5. If it still fails, try deleting the app and redeploying:
+   - Go to Streamlit Cloud dashboard
+   - Delete the app
+   - Redeploy by selecting your repository again
+
 ### Issue: "No numeric columns available for visualizations"
 **Solution**: Your dataset might contain only text columns. Add numeric data or ensure proper data type conversion.
 
 ### Issue: Excel export not working
 **Solution**: Ensure `openpyxl` is installed:
 ```bash
-pip install openpyxl
+pip install openpyxl==3.11.0
 ```
 
 ### Issue: App crashes when uploading large files
