@@ -216,11 +216,20 @@ These cloud platforms support Python applications but require more setup:
 
 ```
 File-handling-Project/
-├── App.py                 # Main Streamlit application
-├── requirements.txt       # Python dependencies
-├── README.md             # This file
-└── LICENSE               # Project license
+├── .streamlit/
+│   └── config.toml           # Streamlit configuration
+├── App.py                    # Main Streamlit application
+├── requirements.txt          # Python dependencies
+├── .python-version          # Python version specification
+├── runtime.txt              # Runtime version for deployment
+├── README.md                # This file
+└── LICENSE                  # Project license
 ```
+
+**New Files Explanation:**
+- `.streamlit/config.toml` - Customizes Streamlit app appearance and behavior
+- `.python-version` - Specifies Python 3.11.8 for consistency
+- `runtime.txt` - Tells deployment platforms which Python version to use
 
 ---
 
@@ -244,37 +253,93 @@ pip install -r requirements.txt
 ```
 
 ### Issue: Streamlit Cloud Deployment Error - "installer returned a non-zero exit code"
-**Solution**: This is usually caused by version conflicts. Try these steps:
+**Solution**: This is usually caused by version conflicts or Python version issues. Follow these steps:
 
-1. **Clear Streamlit Cloud cache**:
-   - Go to your app settings on Streamlit Cloud
-   - Click "Manage app" → "Settings"
-   - Scroll down and click "Reboot app"
+#### Step 1: Update Files (Already Done in Latest Version)
+The updated requirements.txt now includes:
+```
+streamlit==1.32.0
+pandas==2.2.0
+numpy==1.26.4
+matplotlib==3.8.3
+seaborn==0.13.2
+scipy==1.12.0
+openpyxl==3.11.0
+```
 
-2. **Update your local requirements.txt** (already done):
-   ```
-   streamlit==1.31.1
-   pandas==2.1.4
-   numpy==1.24.3
-   matplotlib==3.8.2
-   seaborn==0.13.1
-   scipy==1.11.4
-   openpyxl==3.11.0
-   ```
+#### Step 2: Ensure These Files Exist in Your Repository
+Make sure you have these configuration files (they should be auto-generated):
 
-3. **Push the update to GitHub**:
-   ```bash
-   git add requirements.txt
-   git commit -m "Fix dependency versions for Streamlit Cloud"
-   git push origin main
-   ```
+**File: `.streamlit/config.toml`**
+```toml
+[theme]
+primaryColor = "#FF6B6B"
+backgroundColor = "#F0F2F6"
+secondaryBackgroundColor = "#E0E0E6"
+textColor = "#262730"
+font = "sans serif"
 
-4. **Reboot your Streamlit Cloud app** from the app menu (three dots → Reboot app)
+[server]
+headless = true
+runOnSave = true
+maxUploadSize = 200
+```
 
-5. If it still fails, try deleting the app and redeploying:
-   - Go to Streamlit Cloud dashboard
-   - Delete the app
-   - Redeploy by selecting your repository again
+**File: `.python-version`**
+```
+3.11.8
+```
+
+**File: `runtime.txt`**
+```
+python-3.11.8
+```
+
+#### Step 3: Push All Changes to GitHub
+```bash
+git add .
+git commit -m "Fix dependency versions and add config files"
+git push origin main
+```
+
+#### Step 4: Redeploy on Streamlit Cloud
+1. Go to your Streamlit Cloud app dashboard
+2. Click the three dots menu (⋯) → **Reboot app**
+3. Wait for the app to reboot and redeploy
+
+#### Step 5: If Still Getting Errors
+Try these advanced troubleshooting steps:
+
+**Option A: Delete and Redeploy**
+1. Go to Streamlit Cloud dashboard
+2. Click the three dots on your app → **Delete app**
+3. Go back and click **"New app"**
+4. Select your repository again
+5. Deploy fresh
+
+**Option B: Check Build Logs**
+1. Click the three dots menu → **View logs**
+2. Look for specific error messages
+3. Common errors:
+   - **numpy compilation error**: Remove numpy from requirements (pandas includes it)
+   - **scipy compilation error**: Try older scipy version
+
+**Option C: Minimal requirements.txt**
+If errors persist, try this minimal version:
+```
+streamlit==1.32.0
+pandas==2.2.0
+matplotlib==3.8.3
+seaborn==0.13.2
+openpyxl==3.11.0
+```
+(scipy is optional; it's used for statistical calculations)
+
+**Option D: Contact Streamlit Support**
+If nothing works, Streamlit Cloud team can help:
+- Go to https://discuss.streamlit.io
+- Post your error with build logs
+- Include Python version and package versions
 
 ### Issue: Vercel Deployment Error - "No python entrypoint found"
 **⚠️ IMPORTANT**: **Vercel does NOT support Streamlit apps!**
