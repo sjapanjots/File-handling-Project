@@ -4,103 +4,354 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import seaborn as sns
+from scipy import stats
+from io import BytesIO
 
 st.set_page_config(page_title="CSV Cleaner + EDA", layout="wide")
 
 st.title("📊 CSV Data Cleaner & EDA Tool")
+st.markdown("*Advanced data cleaning and exploratory data analysis*")
 
 # Upload file
 uploaded_file = st.file_uploader("Upload your CSV file", type=["csv"])
 
 if uploaded_file is not None:
     df = pd.read_csv(uploaded_file)
+    df_original = df.copy()
 
-    st.subheader("🔍 Raw Data Preview")
-    st.dataframe(df.head())
+    # Create tabs for organization
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(["📊 Overview", "🧹 Data Cleaning", "📈 EDA", "🎨 Advanced Visualizations", "⬇️ Export"])
 
-    # Basic Info
-    st.subheader("📌 Dataset Info")
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Rows", df.shape[0])
-    col2.metric("Columns", df.shape[1])
-    col3.metric("Duplicate Rows", df.duplicated().sum())
+    # ==================== TAB 1: OVERVIEW ====================
+    with tab1:
+        st.subheader("🔍 Raw Data Preview")
+        st.dataframe(df.head(10))
 
-    # Missing Values
-    st.subheader("❗ Missing Values")
-    missing = df.isnull().sum()
-    st.dataframe(missing[missing > 0])
+        col1, col2, col3, col4 = st.columns(4)
+        col1.metric("Rows", df.shape[0])
+        col2.metric("Columns", df.shape[1])
+        col3.metric("Duplicate Rows", df.duplicated().sum())
+        col4.metric("Memory Usage", f"{df.memory_usage().sum() / 1024:.2f} KB")
 
-    # Cleaning Options
-    st.subheader("🧹 Data Cleaning")
+        # Data Types
+        st.subheader("📋 Column Data Types")
+        dtype_df = pd.DataFrame({
+            'Column': df.columns,
+            'Data Type': df.dtypes,
+            'Non-Null Count': df.count(),
+            'Null Count': df.isnull().sum()
+        })
+        st.dataframe(dtype_df, use_container_width=True)
 
-    if st.checkbox("Drop duplicate rows"):
-        df = df.drop_duplicates()
-        st.success("Duplicates removed")
+        # Missing Values Analysis
+        st.subheader("❗ Missing Values Analysis")
+        missing_data = pd.DataFrame({
+            'Column': df.columns,
+            'Missing Count': df.isnull().sum(),
+            'Missing %': (df.isnull().sum() / len(df) * 100).round(2)
+        })
+        missing_data = missing_data[missing_data['Missing Count'] > 0].sort_values('Missing Count', ascending=False)
+        
+        if not missing_data.empty:
+            st.dataframe(missing_data, use_container_width=True)
+            fig, ax = plt.subplots(figsize=(10, 5))
+            ax.bar(missing_data['Column'], missing_data['Missing %'])
+            ax.set_xlabel('Columns')
+            ax.set_ylabel('Missing %')
+            ax.set_title('Missing Values Distribution')
+            plt.xticks(rotation=45, ha='right')
+            st.pyplot(fig)
+        else:
+            st.success("✅ No missing values found!")
 
-    if st.checkbox("Fill missing values"):
-        strategy = st.selectbox("Select method", ["Mean", "Median", "Mode"])
+    # ==================== TAB 2: DATA CLEANING ====================
+    with tab2:
+        st.subheader("🧹 Data Cleaning Operations")
+        
+        cleaning_col1, cleaning_col2 = st.columns(2)
+        
+        with cleaning_col1:
+            st.write("**Step 1: Remove Duplicates**")
+            if st.checkbox("Drop duplicate rows"):
+                df = df.drop_duplicates()
+                st.success(f"✅ Duplicates removed! Remaining rows: {len(df)}")
+            
+            st.write("**Step 2: Handle Missing Values**")
+            if st.checkbox("Fill missing values"):
+                strategy = st.selectbox("Select filling method", ["Mean", "Median", "Mode", "Forward Fill", "Backward Fill", "Drop"])
+                
+                if strategy == "Drop":
+                    df = df.dropna()
+                    st.success("✅ Rows with missing values removed!")
+                else:
+                    for col in df.select_dtypes(include=np.number).columns:
+                        if df[col].isnull().sum() > 0:
+                            if strategy == "Mean":
+                                df[col].fillna(df[col].mean(), inplace=True)
+                            elif strategy == "Median":
+                                df[col].fillna(df[col].median(), inplace=True)
+                            elif strategy == "Mode":
+                                mode_val = df[col].mode()[0] if len(df[col].mode()) > 0 else df[col].mean()
+                                df[col].fillna(mode_val, inplace=True)
+                            elif strategy == "Forward Fill":
+                                df[col].fillna(method='ffill', inplace=True)
+                            elif strategy == "Backward Fill":
+                                df[col].fillna(method='bfill', inplace=True)
+                    st.success(f"✅ Missing values filled using {strategy}")
+        
+        with cleaning_col2:
+            st.write("**Step 3: Handle Outliers**")
+            if st.checkbox("Remove outliers (IQR method)"):
+                numeric_cols = df.select_dtypes(include=np.number).columns
+                outliers_removed = 0
+                
+                for col in numeric_cols:
+                    Q1 = df[col].quantile(0.25)
+                    Q3 = df[col].quantile(0.75)
+                    IQR = Q3 - Q1
+                    lower_bound = Q1 - 1.5 * IQR
+                    upper_bound = Q3 + 1.5 * IQR
+                    
+                    outliers_mask = (df[col] < lower_bound) | (df[col] > upper_bound)
+                    outliers_removed += outliers_mask.sum()
+                    df = df[~outliers_mask]
+                
+                st.success(f"✅ {outliers_removed} outliers removed!")
+            
+            st.write("**Step 4: Handle Whitespace**")
+            if st.checkbox("Remove leading/trailing whitespace"):
+                for col in df.select_dtypes(include='object').columns:
+                    df[col] = df[col].str.strip()
+                st.success("✅ Whitespace removed from text columns!")
+        
+        st.write("**Step 5: Data Type Conversion**")
+        cols_to_convert = st.multiselect("Select columns to convert", df.columns)
+        
+        if cols_to_convert:
+            new_type = st.selectbox("Convert to:", ["int", "float", "string", "category", "datetime"])
+            
+            if st.button("Convert Selected Columns"):
+                try:
+                    for col in cols_to_convert:
+                        if new_type == "datetime":
+                            df[col] = pd.to_datetime(df[col])
+                        else:
+                            df[col] = df[col].astype(new_type)
+                    st.success(f"✅ Columns converted to {new_type}")
+                except Exception as e:
+                    st.error(f"❌ Conversion failed: {str(e)}")
 
-        for col in df.select_dtypes(include=np.number).columns:
-            if strategy == "Mean":
-                df[col].fillna(df[col].mean(), inplace=True)
-            elif strategy == "Median":
-                df[col].fillna(df[col].median(), inplace=True)
-            elif strategy == "Mode":
-                df[col].fillna(df[col].mode()[0], inplace=True)
+    # ==================== TAB 3: EDA ====================
+    with tab3:
+        st.subheader("📈 Exploratory Data Analysis")
+        
+        numeric_df = df.select_dtypes(include=np.number)
+        categorical_df = df.select_dtypes(include='object')
+        
+        # Summary Statistics
+        st.write("**Summary Statistics**")
+        st.dataframe(df.describe().T, use_container_width=True)
+        
+        # Skewness and Kurtosis
+        if not numeric_df.empty:
+            st.write("**Distribution Characteristics**")
+            dist_data = []
+            for col in numeric_df.columns:
+                dist_data.append({
+                    'Column': col,
+                    'Skewness': stats.skew(numeric_df[col].dropna()),
+                    'Kurtosis': stats.kurtosis(numeric_df[col].dropna()),
+                    'Mean': numeric_df[col].mean(),
+                    'Std Dev': numeric_df[col].std()
+                })
+            
+            dist_df = pd.DataFrame(dist_data)
+            st.dataframe(dist_df, use_container_width=True)
+        
+        # Correlation Analysis
+        if not numeric_df.empty:
+            st.subheader("🔥 Correlation Analysis")
+            corr = numeric_df.corr()
+            
+            fig, ax = plt.subplots(figsize=(10, 8))
+            sns.heatmap(corr, annot=True, fmt='.2f', cmap='coolwarm', center=0, ax=ax)
+            ax.set_title('Correlation Matrix')
+            st.pyplot(fig)
+            
+            # Highly correlated pairs
+            st.write("**Highly Correlated Pairs (>0.7)**")
+            corr_pairs = []
+            for i in range(len(corr.columns)):
+                for j in range(i+1, len(corr.columns)):
+                    if abs(corr.iloc[i, j]) > 0.7:
+                        corr_pairs.append({
+                            'Feature 1': corr.columns[i],
+                            'Feature 2': corr.columns[j],
+                            'Correlation': corr.iloc[i, j]
+                        })
+            
+            if corr_pairs:
+                st.dataframe(pd.DataFrame(corr_pairs), use_container_width=True)
+            else:
+                st.info("No highly correlated pairs found")
+        
+        # Categorical Analysis
+        if not categorical_df.empty:
+            st.subheader("🏷️ Categorical Data Analysis")
+            cat_col = st.selectbox("Select categorical column", categorical_df.columns)
+            
+            value_counts = df[cat_col].value_counts()
+            st.write(f"**Unique values: {df[cat_col].nunique()}**")
+            st.dataframe(value_counts, use_container_width=True)
+            
+            fig, ax = plt.subplots(figsize=(10, 5))
+            value_counts.plot(kind='bar', ax=ax)
+            ax.set_title(f'Distribution of {cat_col}')
+            ax.set_xlabel(cat_col)
+            ax.set_ylabel('Count')
+            plt.xticks(rotation=45, ha='right')
+            st.pyplot(fig)
 
-        st.success(f"Missing values filled using {strategy}")
+    # ==================== TAB 4: ADVANCED VISUALIZATIONS ====================
+    with tab4:
+        st.subheader("🎨 Advanced Visualizations")
+        
+        numeric_cols = numeric_df.columns.tolist()
+        
+        if numeric_cols:
+            # Box Plot
+            st.write("**Box Plot - Outlier Detection**")
+            box_col = st.selectbox("Select column for box plot", numeric_cols)
+            
+            fig, ax = plt.subplots(figsize=(10, 5))
+            box_data = [df[numeric_cols]]
+            ax.boxplot(box_data[0])
+            ax.set_xticklabels(numeric_cols)
+            ax.set_title('Box Plot - All Numeric Columns')
+            plt.xticks(rotation=45, ha='right')
+            st.pyplot(fig)
+            
+            # Distribution Plot
+            st.write("**Distribution Analysis**")
+            dist_col = st.selectbox("Select column for distribution", numeric_cols, key="dist_col")
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                fig, ax = plt.subplots(figsize=(8, 5))
+                ax.hist(df[dist_col], bins=30, edgecolor='black', alpha=0.7)
+                ax.set_title(f'Histogram of {dist_col}')
+                ax.set_xlabel(dist_col)
+                ax.set_ylabel('Frequency')
+                st.pyplot(fig)
+            
+            with col2:
+                fig, ax = plt.subplots(figsize=(8, 5))
+                df[dist_col].plot(kind='density', ax=ax)
+                ax.set_title(f'Density Plot of {dist_col}')
+                ax.set_xlabel(dist_col)
+                st.pyplot(fig)
+            
+            # Scatter Plot
+            st.write("**Scatter Plot Analysis**")
+            if len(numeric_cols) >= 2:
+                scatter_cols = st.multiselect("Select two columns for scatter plot", numeric_cols, default=numeric_cols[:2], max_selections=2)
+                
+                if len(scatter_cols) == 2:
+                    fig, ax = plt.subplots(figsize=(10, 6))
+                    ax.scatter(df[scatter_cols[0]], df[scatter_cols[1]], alpha=0.6)
+                    ax.set_xlabel(scatter_cols[0])
+                    ax.set_ylabel(scatter_cols[1])
+                    ax.set_title(f'Scatter Plot: {scatter_cols[0]} vs {scatter_cols[1]}')
+                    st.pyplot(fig)
+            
+            # Pair Plot (for limited columns)
+            st.write("**Pair Plot**")
+            if st.checkbox("Generate Pair Plot (for up to 5 numeric columns)"):
+                cols_for_pairplot = st.multiselect("Select columns for pair plot", numeric_cols, max_selections=5)
+                
+                if cols_for_pairplot and len(cols_for_pairplot) >= 2:
+                    fig = sns.pairplot(df[cols_for_pairplot], diag_kind='hist')
+                    st.pyplot(fig)
+            
+            # Violin Plot
+            st.write("**Violin Plot - Distribution Comparison**")
+            if len(categorical_df.columns) > 0 and len(numeric_cols) > 0:
+                violin_cat = st.selectbox("Select categorical column", categorical_df.columns, key="violin_cat")
+                violin_num = st.selectbox("Select numeric column", numeric_cols, key="violin_num")
+                
+                fig, ax = plt.subplots(figsize=(10, 6))
+                sns.violinplot(data=df, x=violin_cat, y=violin_num, ax=ax)
+                ax.set_title(f'Violin Plot: {violin_num} by {violin_cat}')
+                plt.xticks(rotation=45, ha='right')
+                st.pyplot(fig)
+        else:
+            st.warning("No numeric columns available for visualizations")
 
-    # Updated Data Preview
-    st.subheader("✅ Cleaned Data Preview")
-    st.dataframe(df.head())
+    # ==================== TAB 5: EXPORT ====================
+    with tab5:
+        st.subheader("⬇️ Download Cleaned Data")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            csv = df.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                label="📥 Download as CSV",
+                data=csv,
+                file_name='cleaned_data.csv',
+                mime='text/csv',
+            )
+        
+        with col2:
+            excel_buffer = BytesIO()
+            df.to_excel(excel_buffer, index=False, engine='openpyxl')
+            excel_buffer.seek(0)
+            st.download_button(
+                label="📥 Download as Excel",
+                data=excel_buffer.getvalue(),
+                file_name='cleaned_data.xlsx',
+                mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            )
+        
+        # Data Quality Report
+        st.subheader("📋 Data Quality Report")
+        
+        report = {
+            'Total Rows': len(df),
+            'Total Columns': len(df.columns),
+            'Duplicate Rows Removed': len(df_original) - len(df),
+            'Missing Values': df.isnull().sum().sum(),
+            'Memory Usage (KB)': df.memory_usage().sum() / 1024
+        }
+        
+        for key, value in report.items():
+            st.metric(key, value)
+        
+        # Export Report as Text
+        report_text = f"""
+DATA QUALITY REPORT
+==================
 
-    # Summary Statistics
-    st.subheader("📈 Summary Statistics")
-    st.write(df.describe())
+Original Dataset:
+  - Rows: {len(df_original)}
+  - Columns: {len(df_original.columns)}
 
-    # Correlation Heatmap
-    st.subheader("🔥 Correlation Heatmap")
+Cleaned Dataset:
+  - Rows: {len(df)}
+  - Columns: {len(df.columns)}
+  - Rows Removed: {len(df_original) - len(df)}
+  - Memory Usage: {df.memory_usage().sum() / 1024:.2f} KB
+  - Total Missing Values: {df.isnull().sum().sum()}
 
-    numeric_df = df.select_dtypes(include=np.number)
-
-    if not numeric_df.empty:
-        corr = numeric_df.corr()
-
-        fig, ax = plt.subplots()
-        cax = ax.matshow(corr)
-        plt.colorbar(cax)
-
-        ax.set_xticks(range(len(corr.columns)))
-        ax.set_yticks(range(len(corr.columns)))
-
-        ax.set_xticklabels(corr.columns, rotation=90)
-        ax.set_yticklabels(corr.columns)
-
-        st.pyplot(fig)
-
-    else:
-        st.warning("No numeric columns available for correlation.")
-
-    # Distribution Plot
-    st.subheader("📊 Feature Distribution")
-
-    numeric_cols = numeric_df.columns.tolist()
-
-    if numeric_cols:
-        selected_col = st.selectbox("Select column", numeric_cols)
-
-        fig, ax = plt.subplots()
-        ax.hist(df[selected_col], bins=20)
-        ax.set_title(f"Distribution of {selected_col}")
-        st.pyplot(fig)
-
-    # Download cleaned file
-    st.subheader("⬇️ Download Cleaned Data")
-
-    csv = df.to_csv(index=False).encode('utf-8')
-    st.download_button(
-        label="Download CSV",
-        data=csv,
-        file_name='cleaned_data.csv',
-        mime='text/csv',
-    )
+Column Details:
+{dtype_df.to_string()}
+        """
+        
+        st.download_button(
+            label="📄 Download Report as Text",
+            data=report_text,
+            file_name='data_quality_report.txt',
+            mime='text/plain',
+        )
