@@ -89,11 +89,11 @@ The app will open in your default browser at `http://localhost:8501`
 
 ---
 
-### Option 2: Deploy on Streamlit Cloud
+### Option 2: Deploy on Streamlit Cloud ⭐ **RECOMMENDED**
 
 #### Prerequisites:
 - GitHub account
-- Streamlit account
+- Streamlit account (free)
 
 #### Steps:
 1. Push your project to GitHub:
@@ -112,6 +112,62 @@ The app will open in your default browser at `http://localhost:8501`
 5. Click **"Deploy"**
 
 Your app will be live and accessible via a unique Streamlit Cloud URL!
+
+**Why Streamlit Cloud?** It's the official, easiest, and best-supported way to deploy Streamlit apps with zero configuration needed.
+
+---
+
+### ⚠️ Important: Vercel is NOT Compatible with Streamlit
+
+**If you tried deploying to Vercel**, you'll get an error because:
+- Vercel expects traditional web frameworks (Flask, Django, FastAPI)
+- Streamlit is a framework designed for data apps, not REST APIs
+- Streamlit requires a persistent server connection
+- Vercel's serverless architecture doesn't support Streamlit's streaming protocol
+
+**Solution**: Use **Streamlit Cloud** instead (recommended) or alternative platforms below.
+
+---
+
+### Option 3: Alternative Deployment Platforms
+
+If you prefer not to use Streamlit Cloud, here are other options:
+
+#### **Option A: Deploy on Heroku** (Requires Procfile)
+Create a `Procfile` file in your project root:
+```
+web: streamlit run App.py --server.port=$PORT --server.address=0.0.0.0
+```
+
+Then push to Heroku:
+```bash
+heroku create your-app-name
+git push heroku main
+```
+
+#### **Option B: Deploy on Railway**
+1. Connect your GitHub repo to [Railway](https://railway.app)
+2. Railway automatically detects Python projects
+3. Set start command: `streamlit run App.py`
+4. Deploy!
+
+#### **Option C: Deploy on Render**
+1. Go to [Render](https://render.com)
+2. Create a new Web Service
+3. Connect your GitHub repository
+4. Set build command: `pip install -r requirements.txt`
+5. Set start command: `streamlit run App.py --server.port 10000 --server.address 0.0.0.0`
+6. Deploy!
+
+#### **Option D: Deploy on AWS / Google Cloud / Azure**
+These cloud platforms support Python applications but require more setup:
+- **AWS EC2**: Run the app on a virtual machine
+- **Google Cloud Run**: Deploy as a containerized service
+- **Azure App Service**: Host as a Python app
+
+---
+
+**✅ BEST OPTION: Use Streamlit Cloud for the easiest deployment experience!**
 
 ---
 
@@ -219,6 +275,25 @@ pip install -r requirements.txt
    - Go to Streamlit Cloud dashboard
    - Delete the app
    - Redeploy by selecting your repository again
+
+### Issue: Vercel Deployment Error - "No python entrypoint found"
+**⚠️ IMPORTANT**: **Vercel does NOT support Streamlit apps!**
+
+**Error Message**:
+```
+Error: No python entrypoint found. Add an 'app' script in pyproject.toml or define an entrypoint in one of: app.py, index.py, server.py, main.py, wsgi.py, asgi.py...
+```
+
+**Why?** Vercel is designed for traditional web frameworks (Flask, Django, FastAPI), not data apps like Streamlit.
+
+**Solution**: Use **[Streamlit Cloud](https://streamlit.io/cloud)** instead (100% free and officially supported):
+1. Go to https://streamlit.io/cloud
+2. Connect your GitHub repository
+3. Select your main file (`App.py`)
+4. Click Deploy!
+
+**Alternative Deployment Options**:
+- **Heroku**, **Railway**, **Render**, **Google Cloud Run**, or **AWS** (see "Alternative Deployment Platforms" section above)
 
 ### Issue: "No numeric columns available for visualizations"
 **Solution**: Your dataset might contain only text columns. Add numeric data or ensure proper data type conversion.
