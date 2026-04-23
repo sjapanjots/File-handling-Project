@@ -95,9 +95,9 @@ if uploaded_file is not None:
                                 mode_val = df[col].mode()[0] if len(df[col].mode()) > 0 else df[col].mean()
                                 df[col].fillna(mode_val, inplace=True)
                             elif strategy == "Forward Fill":
-                                df[col].fillna(method='ffill', inplace=True)
+                                df[col] = df[col].ffill()
                             elif strategy == "Backward Fill":
-                                df[col].fillna(method='bfill', inplace=True)
+                                df[col] = df[col].bfill()
                     st.success(f"✅ Missing values filled using {strategy}")
         
         with cleaning_col2:
@@ -135,14 +135,19 @@ if uploaded_file is not None:
                 try:
                     for col in cols_to_convert:
                         if new_type == "datetime":
-                            df[col] = pd.to_datetime(df[col])
-                        else:
-                            df[col] = df[col].astype(new_type)
+                            df[col] = pd.to_datetime(df[col], errors='coerce')
+                        elif new_type == "int":
+                            df[col] = pd.to_numeric(df[col], errors='coerce').astype(np.int64)
+                        elif new_type == "float":
+                            df[col] = pd.to_numeric(df[col], errors='coerce').astype(np.float64)
+                        elif new_type == "string":
+                            df[col] = df[col].astype("string")
+                        elif new_type == "category":
+                            df[col] = df[col].astype("category")
                     st.success(f"✅ Columns converted to {new_type}")
                 except Exception as e:
                     st.error(f"❌ Conversion failed: {str(e)}")
 
-    # ==================== TAB 3: EDA ====================
     with tab3:
         st.subheader("📈 Exploratory Data Analysis")
         
@@ -182,36 +187,53 @@ if uploaded_file is not None:
             # Highly correlated pairs
             st.write("**Highly Correlated Pairs (>0.7)**")
             corr_pairs = []
-            for i in range(len(corr.columns)):
-                for j in range(i+1, len(corr.columns)):
-                    if abs(corr.iloc[i, j]) > 0.7:
-                        corr_pairs.append({
-                            'Feature 1': corr.columns[i],
-                            'Feature 2': corr.columns[j],
-                            'Correlation': corr.iloc[i, j]
-                        })
+            try:
+                corr_values = corr.values
+                for i in range(len(corr.columns)):
+                    for j in range(i+1, len(corr.columns)):
+                        try:
+                            corr_value = float(corr_values[i, j])
+                            if abs(corr_value) > 0.7:
+                                corr_pairs.append({
+                                    'Feature 1': str(corr.columns[i]),
+                                    'Feature 2': str(corr.columns[j]),
+                                    'Correlation': round(corr_value, 4)
+                                })
+                        except (TypeError, ValueError):
+                            continue
+            except Exception as e:
+                st.warning(f"⚠️ Could not compute all correlations: {str(e)}")
             
             if corr_pairs:
                 st.dataframe(pd.DataFrame(corr_pairs), use_container_width=True)
             else:
-                st.info("No highly correlated pairs found")
+                st.info("💡 No highly correlated pairs found (threshold > 0.7)")
         
         # Categorical Analysis
         if not categorical_df.empty:
             st.subheader("🏷️ Categorical Data Analysis")
-            cat_col = st.selectbox("Select categorical column", categorical_df.columns)
-            
-            value_counts = df[cat_col].value_counts()
-            st.write(f"**Unique values: {df[cat_col].nunique()}**")
-            st.dataframe(value_counts, use_container_width=True)
-            
-            fig, ax = plt.subplots(figsize=(10, 5))
-            value_counts.plot(kind='bar', ax=ax)
-            ax.set_title(f'Distribution of {cat_col}')
-            ax.set_xlabel(cat_col)
-            ax.set_ylabel('Count')
-            plt.xticks(rotation=45, ha='right')
-            st.pyplot(fig)
+            try:
+                cat_col = st.selectbox("Select categorical column", categorical_df.columns)
+                
+                value_counts = df[cat_col].value_counts()
+                st.write(f"**Unique values: {df[cat_col].nunique()}**")
+                st.dataframe(value_counts, use_container_width=True)
+                
+                # Limit to top 20 categories for visualization
+                if len(value_counts) > 20:
+                    st.info(f"📊 Showing top 20 of {len(value_counts)} categories")
+                    value_counts = value_counts.head(20)
+                
+                fig, ax = plt.subplots(figsize=(10, 5))
+                value_counts.plot(kind='bar', ax=ax)
+                ax.set_title(f'Distribution of {cat_col}')
+                ax.set_xlabel(cat_col)
+                ax.set_ylabel('Count')
+                plt.xticks(rotation=45, ha='right')
+                plt.tight_layout()
+                st.pyplot(fig)
+            except Exception as e:
+                st.error(f"❌ Error in categorical analysis: {str(e)}")
 
     # ==================== TAB 4: ADVANCED VISUALIZATIONS ====================
     with tab4:
@@ -222,49 +244,74 @@ if uploaded_file is not None:
         if numeric_cols:
             # Box Plot
             st.write("**Box Plot - Outlier Detection**")
-            box_col = st.selectbox("Select column for box plot", numeric_cols)
-            
-            fig, ax = plt.subplots(figsize=(10, 5))
-            box_data = [df[numeric_cols]]
-            ax.boxplot(box_data[0])
-            ax.set_xticklabels(numeric_cols)
-            ax.set_title('Box Plot - All Numeric Columns')
-            plt.xticks(rotation=45, ha='right')
-            st.pyplot(fig)
+            try:
+                box_col = st.selectbox("Select column for box plot", numeric_cols)
+                
+                fig, ax = plt.subplots(figsize=(10, 5))
+                box_data = [df[numeric_cols].dropna()]
+                ax.boxplot(box_data[0])
+                ax.set_xticklabels(numeric_cols)
+                ax.set_title('Box Plot - All Numeric Columns')
+                plt.xticks(rotation=45, ha='right')
+                plt.tight_layout()
+                st.pyplot(fig)
+            except Exception as e:
+                st.error(f"❌ Error generating box plot: {str(e)}")
             
             # Distribution Plot
             st.write("**Distribution Analysis**")
-            dist_col = st.selectbox("Select column for distribution", numeric_cols, key="dist_col")
-            
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                fig, ax = plt.subplots(figsize=(8, 5))
-                ax.hist(df[dist_col], bins=30, edgecolor='black', alpha=0.7)
-                ax.set_title(f'Histogram of {dist_col}')
-                ax.set_xlabel(dist_col)
-                ax.set_ylabel('Frequency')
-                st.pyplot(fig)
-            
-            with col2:
-                fig, ax = plt.subplots(figsize=(8, 5))
-                df[dist_col].plot(kind='density', ax=ax)
-                ax.set_title(f'Density Plot of {dist_col}')
-                ax.set_xlabel(dist_col)
-                st.pyplot(fig)
+            try:
+                dist_col = st.selectbox("Select column for distribution", numeric_cols, key="dist_col")
+                
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    fig, ax = plt.subplots(figsize=(8, 5))
+                    data_to_plot = df[dist_col].dropna()
+                    if len(data_to_plot) > 0:
+                        ax.hist(data_to_plot, bins=30, edgecolor='black', alpha=0.7)
+                        ax.set_title(f'Histogram of {dist_col}')
+                        ax.set_xlabel(dist_col)
+                        ax.set_ylabel('Frequency')
+                        st.pyplot(fig)
+                    else:
+                        st.warning(f"⚠️ No valid data for {dist_col}")
+                
+                with col2:
+                    fig, ax = plt.subplots(figsize=(8, 5))
+                    data_to_plot = df[dist_col].dropna()
+                    if len(data_to_plot) > 0:
+                        data_to_plot.plot(kind='density', ax=ax)
+                        ax.set_title(f'Density Plot of {dist_col}')
+                        ax.set_xlabel(dist_col)
+                        plt.tight_layout()
+                        st.pyplot(fig)
+                    else:
+                        st.warning(f"⚠️ No valid data for {dist_col}")
+            except Exception as e:
+                st.error(f"❌ Error generating distribution plots: {str(e)}")
             
             # Scatter Plot
             st.write("**Scatter Plot Analysis**")
-            if len(numeric_cols) >= 2:
-                scatter_cols = st.multiselect("Select two columns for scatter plot", numeric_cols, default=numeric_cols[:2], max_selections=2)
-                
-                if len(scatter_cols) == 2:
-                    fig, ax = plt.subplots(figsize=(10, 6))
-                    ax.scatter(df[scatter_cols[0]], df[scatter_cols[1]], alpha=0.6)
-                    ax.set_xlabel(scatter_cols[0])
-                    ax.set_ylabel(scatter_cols[1])
-                    ax.set_title(f'Scatter Plot: {scatter_cols[0]} vs {scatter_cols[1]}')
-                    st.pyplot(fig)
+            try:
+                if len(numeric_cols) >= 2:
+                    scatter_cols = st.multiselect("Select two columns for scatter plot", numeric_cols, default=numeric_cols[:2], max_selections=2)
+                    
+                    if len(scatter_cols) == 2:
+                        scatter_data = df[scatter_cols].dropna()
+                        
+                        if len(scatter_data) > 0:
+                            fig, ax = plt.subplots(figsize=(10, 6))
+                            ax.scatter(scatter_data[scatter_cols[0]], scatter_data[scatter_cols[1]], alpha=0.6)
+                            ax.set_xlabel(scatter_cols[0])
+                            ax.set_ylabel(scatter_cols[1])
+                            ax.set_title(f'Scatter Plot: {scatter_cols[0]} vs {scatter_cols[1]}')
+                            plt.tight_layout()
+                            st.pyplot(fig)
+                        else:
+                            st.warning("⚠️ No valid data for scatter plot")
+            except Exception as e:
+                st.error(f"❌ Error generating scatter plot: {str(e)}")
             
             # Pair Plot (for limited columns)
             st.write("**Pair Plot**")
@@ -272,20 +319,42 @@ if uploaded_file is not None:
                 cols_for_pairplot = st.multiselect("Select columns for pair plot", numeric_cols, max_selections=5)
                 
                 if cols_for_pairplot and len(cols_for_pairplot) >= 2:
-                    fig = sns.pairplot(df[cols_for_pairplot], diag_kind='hist')
-                    st.pyplot(fig)
+                    try:
+                        # Check for missing values
+                        subset_df = df[cols_for_pairplot].dropna()
+                        
+                        if len(subset_df) == 0:
+                            st.warning("⚠️ No valid data available after removing missing values")
+                        else:
+                            # Generate pairplot and extract the underlying figure
+                            pairgrid = sns.pairplot(subset_df, diag_kind='hist', plot_kws={'alpha': 0.6})
+                            # Extract matplotlib figure from PairGrid
+                            matplotlib_figure = pairgrid.figure
+                            st.pyplot(matplotlib_figure)
+                    except Exception as e:
+                        st.error(f"❌ Error generating pair plot: {str(e)}")
+                        st.info("💡 Tip: Ensure selected columns have numeric data without too many unique values")
             
             # Violin Plot
             st.write("**Violin Plot - Distribution Comparison**")
             if len(categorical_df.columns) > 0 and len(numeric_cols) > 0:
-                violin_cat = st.selectbox("Select categorical column", categorical_df.columns, key="violin_cat")
-                violin_num = st.selectbox("Select numeric column", numeric_cols, key="violin_num")
-                
-                fig, ax = plt.subplots(figsize=(10, 6))
-                sns.violinplot(data=df, x=violin_cat, y=violin_num, ax=ax)
-                ax.set_title(f'Violin Plot: {violin_num} by {violin_cat}')
-                plt.xticks(rotation=45, ha='right')
-                st.pyplot(fig)
+                try:
+                    violin_cat = st.selectbox("Select categorical column", categorical_df.columns, key="violin_cat")
+                    violin_num = st.selectbox("Select numeric column", numeric_cols, key="violin_num")
+                    
+                    # Check for missing values in selected columns
+                    plot_data = df[[violin_cat, violin_num]].dropna()
+                    
+                    if len(plot_data) == 0:
+                        st.warning("⚠️ No valid data available for violin plot")
+                    else:
+                        fig, ax = plt.subplots(figsize=(10, 6))
+                        sns.violinplot(data=plot_data, x=violin_cat, y=violin_num, ax=ax)
+                        ax.set_title(f'Violin Plot: {violin_num} by {violin_cat}')
+                        plt.xticks(rotation=45, ha='right')
+                        st.pyplot(fig)
+                except Exception as e:
+                    st.error(f"❌ Error generating violin plot: {str(e)}")
         else:
             st.warning("No numeric columns available for visualizations")
 
