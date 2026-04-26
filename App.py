@@ -423,3 +423,16 @@ Column Details:
             file_name='data_quality_report.txt',
             mime='text/plain',
         )
+
+# ==================== FOOTER ====================
+st.markdown("---")
+footer_text = """
+<div style="text-align: center; padding: 20px; color: #888;">
+    <p><b>This app is designed and developed by Japanjot Singh</b></p>
+    <p>
+        📧 Email: <a href="mailto:sjapanjots@gmail.com">sjapanjots@gmail.com</a> | 
+        🐙 GitHub: <a href="https://github.com/sjapanjots" target="_blank">sjapanjots</a>
+    </p>
+</div>
+"""
+st.markdown(footer_text, unsafe_allow_html=True)
